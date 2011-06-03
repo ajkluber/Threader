@@ -181,7 +181,7 @@ def RunScap(fname,tmpltname):
   
   return newfname, err
  
-def RunLoopy(fname, loopData, seq, seq2, structNum, name):
+def RunLoopy(fname, loopData, seq, seq2, structNum, name, fdest, failList):
   ## This function runs the Jackal program Loopy using the Python
   ## subprocess module. Loopy takes a structure and inserts loops.
   ## The output is a new file with the added extension '.loopy'.
@@ -196,24 +196,7 @@ def RunLoopy(fname, loopData, seq, seq2, structNum, name):
   call(['rm','tplt*'])
 
   for loc, loop in loopData:
-    loc2 = loc - loopcount
-    if loop == 0:
-      ## This is entered when a cut needs to be entered.
-      print "Now inserting a cut at residue ", loc
-      loctemp = str(loc - 2) + "-" +  str(loc + 2)
-      restemp = seq2[loc2 - 2: loc2] + seq2[loc2 : loc2 + 2]
-
-    else:
-      print "Now inserting a loop of ", loop, " at residue ", loc
-      loctemp = str(loc - 2) + "-" + str(loc + 1)
-      restemp = seq2[loc2 - 2: loc2 ] + loop + seq2[loc2 : loc2 + 2]
-      loopcount += len(loop)
-
-    task = "loopy -prm " + prm + " -ini " + ini + " -obj " + loctemp + " -cid A -res " + restemp + " " + fname
-    
-    print task, '\n'
-    newtask = task.split()
-    call(newtask)
+    loopcount = AddLoopCut(loc,loop,loopcount)
 
     temp = (fname.split('.pdb'))[0] + '_loopy.pdb'
     
@@ -227,15 +210,41 @@ def RunLoopy(fname, loopData, seq, seq2, structNum, name):
       call(['rm','tplt*'])
       break
 
-  cutCall = "cut -c0-55 " + fname + " > " + endfile 
   if err == 0:
     call(cleanup)
+    
+    cutCall = "cut -c0-55 " + fname + " > " + endfile 
     call(cutCall, shell=True)
+
+    mvtask = "mv " + endfile + " " + fdest
+    call(mvtask.split())
   else:
     pass
-  #call(cutCall.split())
 
   return endfile
+
+def AddLoopCut(loc,loop,loopcount):
+
+  loc2 = loc - loopcount
+  if loop == 0:
+    ## This is entered when a cut needs to be entered.
+    print "Now inserting a cut at residue ", loc
+    loctemp = str(loc - 2) + "-" +  str(loc + 2)
+    restemp = seq2[loc2 - 2: loc2] + seq2[loc2 : loc2 + 2]
+
+  else:
+    print "Now inserting a loop of ", loop, " at residue ", loc
+    loctemp = str(loc - 2) + "-" + str(loc + 1)
+    restemp = seq2[loc2 - 2: loc2 ] + loop + seq2[loc2 : loc2 + 2]
+    loopcount += len(loop)
+
+  task = "loopy -prm " + prm + " -ini " + ini + " -obj " + loctemp + " -cid A -res " + restemp + " " + fname
+  
+  print task, '\n'
+  newtask = task.split()
+  call(newtask)
+
+  return loopcount
 
 def CheckForSuccess(temp):
 
@@ -275,7 +284,7 @@ def ReformatSeq(seq, start):
   return new
 
 
-def ThreadToStructure(thread, name, structNum):
+def ThreadToStructure(thread, name, structNum, fdest):
   ## This function is a wrapper for the entire process. It simply takes in 
   ## a sequence and the protein name. The name is just used to rename the
   ## final structure file.
@@ -288,7 +297,7 @@ def ThreadToStructure(thread, name, structNum):
   if err == 1:
     finalfile = '0'
   else:
-    finalfile = RunLoopy(scapfile,loopData ,formatSeq, seqtemp, structNum, name)
+    finalfile = RunLoopy(scapfile,loopData ,formatSeq, seqtemp, structNum, name, fdest)
   
   #finalfile = 0
   return finalfile
@@ -320,9 +329,10 @@ if __name__ == "__main__":
 
   threadList = GetInputThreads()
   structNum = 1
+  fdest = "/home/alex/projects/threads/LHBYeast"
   for name,thread in threadList:
     print "Target: ", thread
-    fname = ThreadToStructure(thread,name, structNum)
+    fname = ThreadToStructure(thread,name, structNum, fdest)
     print "Done with ", name
     structNum += 1
     print "*******************************************************************************\n"

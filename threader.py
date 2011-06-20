@@ -171,9 +171,7 @@ def RunScap(fname,tmpltname):
   newtask = task.split()
   call(newtask)
 
-  temp = (fname.split('.pdb'))[0] + '_loopy.pdb'
-  
-  err = CheckForSuccess(temp)
+  err = CheckForSuccess(newfname,fname)
     
   call(['rm',fname, tmpltname])
  
@@ -196,11 +194,11 @@ def RunLoopy(fname, loopData, seq, seq2, structNum, name, fdest, failList):
   call(['rm','tplt*'])
 
   for loc, loop in loopData:
-    loopcount = AddLoopCut(loc,loop,loopcount)
+    loopcount = AddLoopCut(loc,loop,loopcount, seq2, prm, ini, fname)
 
     temp = (fname.split('.pdb'))[0] + '_loopy.pdb'
     
-    err = CheckForSuccess(temp)
+    err = CheckForSuccess(temp, name)
     #err = 0
     if err == 0:
       cleanup.append(fname)
@@ -219,11 +217,12 @@ def RunLoopy(fname, loopData, seq, seq2, structNum, name, fdest, failList):
     mvtask = "mv " + endfile + " " + fdest
     call(mvtask.split())
   else:
+    
     pass
 
-  return endfile
+  return endfile, err, failList
 
-def AddLoopCut(loc,loop,loopcount):
+def AddLoopCut(loc,loop,loopcount, seq2, prm, ini, fname):
 
   loc2 = loc - loopcount
   if loop == 0:
@@ -246,16 +245,31 @@ def AddLoopCut(loc,loop,loopcount):
 
   return loopcount
 
-def CheckForSuccess(temp):
+def CheckForSuccess(temp, name):
 
   err = call(['tail', temp])
 
   if err == 1:
-    print "Operation unsuccessfull. Skipping sequence. " 
+    print "Operation unsuccessfull. Skipping sequence " + name
   else:
     pass
  
   return err
+
+def StripSequenceToBackbone(seq):
+  temp = ''
+  for char in seq:
+    if char == '(' or char == ')' or char == '|' or char == '-':
+      temp += char
+    else:
+      temp += 'G'
+  print temp
+  return temp
+
+def BackupScapList(name, formatSeq, startPos):
+  
+
+  newSeq = ''
 
 def ReformatSeq(seq, start):
   ## This functin justs takes a thread being processed and puts the 
@@ -284,10 +298,11 @@ def ReformatSeq(seq, start):
   return new
 
 
-def ThreadToStructure(thread, name, structNum, fdest):
+def ThreadToStructure(thread, name, structNum, fdest, failList):
   ## This function is a wrapper for the entire process. It simply takes in 
   ## a sequence and the protein name. The name is just used to rename the
   ## final structure file.
+  thread = StripSequenceToBackbone(thread)
   formatSeq, seqtemp, startPos, loopData = FormatSeqForScap(thread)
   template = MakeVariableLengthTemplate(len(formatSeq),startPos)
   scapList = ThreadToScapFile(formatSeq, name)
@@ -296,11 +311,12 @@ def ThreadToStructure(thread, name, structNum, fdest):
   #name = ''
   if err == 1:
     finalfile = '0'
-  else:
-    finalfile = RunLoopy(scapfile,loopData ,formatSeq, seqtemp, structNum, name, fdest)
-  
-  #finalfile = 0
-  return finalfile
+  elif err == 0 and loopData != []:
+    finalfile, err2, failList = RunLoopy(scapfile,loopData ,formatSeq, seqtemp, structNum, name, fdest, failList)
+  elif err == 0 and loopData == []:
+    finalfile = scapfile
+
+  return finalfile, failList
 
 def GetInputThreads():
   ## This function retreives threads from the input file. It ignores any
@@ -329,10 +345,14 @@ if __name__ == "__main__":
 
   threadList = GetInputThreads()
   structNum = 1
-  fdest = "/home/alex/projects/threads/LHBYeast"
+  #fdest = "/home/alex/projects/threads/LHBYeast"
+  fdest = "/export/home/shared/yeast"
+  failList = []
+
   for name,thread in threadList:
     print "Target: ", thread
-    fname = ThreadToStructure(thread,name, structNum, fdest)
+    fname, failList = ThreadToStructure(thread,name, structNum, fdest, failList)
+    #thread = StripSequenceToBackbone(thread)
     print "Done with ", name
     structNum += 1
     print "*******************************************************************************\n"

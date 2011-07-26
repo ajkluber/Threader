@@ -2,7 +2,7 @@
 from subprocess import Popen, call
 from string import join
 
-def FormatSeqForScap(rawSeq):
+def FormatSeqForScapBackbone(rawSeq):
   ## This function takes a sequence in Youval's format,
   ## i.e.PLSRKH|E(R)HVGDL|GNVTAD|-KDGVA|-DVSIE, records
   ## the positions of loops (*) and cuts -. Then loops
@@ -11,6 +11,90 @@ def FormatSeqForScap(rawSeq):
   ## input:  rawSeq = "PLSRKH|E(R)HVGDL|GNVTAD|-KDGVA|-DVSIE"
   ## output: formatSeq = "PLSRKHEHVGDLGNVTADGKDGVAGDVSIE"
   ## 		   loopcutData = [[7,'R'],[19,0],[25,0]]
+  ##  	   startPos = 1
+
+  loopcutData = []
+  formatSeq = ''
+  loopflag = 0
+  i = 0
+  firstTurn = 0
+  startPos = 1
+  looplength = 0
+  seqtemp = ''
+  k = 0
+  valLoop = []
+  
+  j = 0
+  while firstTurn == 0:
+    if rawSeq[j] == "|":
+      firstTurn = 1
+    else:
+      startPos = 6 - j
+    j += 1
+
+  
+  ## Loop through chars in the input string.
+  for x in rawSeq:
+    ## If NOT currently in a loop.
+    if loopflag == 0:
+      if x == '|':
+        pass
+      elif x == '-':
+		## Denote cut with 0. Insert glycine
+		## placeholder.
+        loc = i
+        loopcutData.append([loc,0])
+        #formatSeq += 'G'
+        #i+=1  ## THIS IS THE TROUBLE LINE.
+        continue
+      elif x == '(':
+		## Denote the beginning of new loop.
+		## Outermost if/else will now hit the else.
+        temploop = ''
+        loopflag = 1
+        loc = i
+        continue
+      else:
+        if (k + startPos)%6 == 3 or (k + startPos)%6 == 5:
+          formatSeq += 'V'
+          seqtemp += 'V'
+          valLoop.append([k,'G'])
+          i += 1
+          k += 1
+        else: 
+          formatSeq += 'G'
+          seqtemp += 'G'
+          i += 1
+          k += 1
+
+    elif loopflag == 1:
+	  ## This is entered when residues are in a loop.
+      if x == ')':
+		## Reached the end of a loop. Will now 
+		## hit the outermost 'if'.
+
+        loopflag = 0
+        loopcutData.append([loc,temploop])
+      else:
+        temploop += 'G'
+        #seqtemp += x
+        i += 1
+
+  #loopcutData.extend(valLoop)
+
+  return formatSeq, seqtemp, startPos, loopcutData
+
+def FormatSeqForScap(rawSeq):
+  ## This function takes a sequence in Youval's format,
+  ## i.e.PLSRKH|E(R)HVGDL|GNVTAD|-KDGVA|-DVSIE, records
+  ## the positions of loops (*), cuts -, and mutations
+  ## Then loops are removed and Glycine is put in for 
+  ## cut,-, symbols. A flag is given for cut=0,loop=1,
+  ## or mutation=2.
+  ## An example is given below:
+  ## input:  rawSeq = "PLSRKH|E(R)HVGDL|GNVTAD|-KDGVA|-DVSIE"
+  ## output: formatSeq = "PLSRKHEHVGDLGNVTADGKDGVAGDVSIE"
+  ## 		   loopcutData = [[1,7,'R'],[0,19,0],[0,25,0]]
   ##  	   startPos = 1
 
   loopcutData = []
@@ -38,7 +122,7 @@ def FormatSeqForScap(rawSeq):
 		## Denote cut with 0. Insert glycine
 		## placeholder.
         loc = i
-        loopcutData.append([loc,0])
+        loopcutData.append([0,loc,0])
         formatSeq += 'G'
         #i+=1  ## THIS IS THE TROUBLE LINE.
         continue
@@ -60,7 +144,7 @@ def FormatSeqForScap(rawSeq):
 		## hit the outermost 'if'.
 
         loopflag = 0
-        loopcutData.append([loc,temploop])
+        loopcutData.append([1,loc,temploop])
       else:
         temploop += x
         #seqtemp += x
@@ -68,9 +152,11 @@ def FormatSeqForScap(rawSeq):
 
   return formatSeq, seqtemp, startPos, loopcutData
      
-   
+def MakeLoopyList(thread):
+  
+     
+
 def MakeVariableLengthTemplate(length,startingPos):
-  a = "zebra"
   ## MasterTemplate.pdb starts at L2. The 'length' variable
   ## is the sequence length not counting residues in loops.
   ## The 'startingPos' variable is the desired starting 
@@ -193,16 +279,16 @@ def RunLoopy(fname, loopData, seq, seq2, structNum, name, fdest, failList):
   
   call(['rm','tplt*'])
 
-  for loc, loop in loopData:
-    loopcount = AddLoopCut(loc,loop,loopcount, seq2, prm, ini, fname)
+  for flag, loc, loop in loopData:
+    loopcount = AddLoopCut(flag, loc,loop,loopcount, seq2, prm, ini, fname)
 
     temp = (fname.split('.pdb'))[0] + '_loopy.pdb'
     
     err = CheckForSuccess(temp, name)
-    #err = 0
+
+
     if err == 0:
       cleanup.append(fname)
-      #cleanup.append('dummy.txt')
       fname = (fname.split('.pdb'))[0] + '_loopy.pdb'
     else:
       call(['rm','tplt*'])
@@ -217,25 +303,30 @@ def RunLoopy(fname, loopData, seq, seq2, structNum, name, fdest, failList):
     mvtask = "mv " + endfile + " " + fdest
     call(mvtask.split())
   else:
-    
     pass
 
   return endfile, err, failList
 
-def AddLoopCut(loc,loop,loopcount, seq2, prm, ini, fname):
+
+def AddLoopCut(flag,loc,loop,loopcount, seq2, prm, ini, fname):
 
   loc2 = loc - loopcount
-  if loop == 0:
+  if flag == 0:
     ## This is entered when a cut needs to be entered.
     print "Now inserting a cut at residue ", loc
     loctemp = str(loc - 2) + "-" +  str(loc + 2)
     restemp = seq2[loc2 - 2: loc2] + seq2[loc2 : loc2 + 2]
 
-  else:
+  elif flag == 1:
     print "Now inserting a loop of ", loop, " at residue ", loc
     loctemp = str(loc - 2) + "-" + str(loc + 1)
     restemp = seq2[loc2 - 2: loc2 ] + loop + seq2[loc2 : loc2 + 2]
     loopcount += len(loop)
+
+  elif flag == 2:
+    print "Now mutating residue ", loc, " to ", loop
+    loctemp = str(loc - 2) + "-" + str(loc + 1)
+    restemp = seq2[loc2 - 2: loc2 ] + loop + seq2[loc2 : loc2 + 2]
 
   task = "loopy -prm " + prm + " -ini " + ini + " -obj " + loctemp + " -cid A -res " + restemp + " " + fname
   
@@ -256,20 +347,6 @@ def CheckForSuccess(temp, name):
  
   return err
 
-def StripSequenceToBackbone(seq):
-  temp = ''
-  for char in seq:
-    if char == '(' or char == ')' or char == '|' or char == '-':
-      temp += char
-    else:
-      temp += 'G'
-  print temp
-  return temp
-
-def BackupScapList(name, formatSeq, startPos):
-  
-
-  newSeq = ''
 
 def ReformatSeq(seq, start):
   ## This functin justs takes a thread being processed and puts the 
@@ -297,24 +374,39 @@ def ReformatSeq(seq, start):
 
   return new
 
+def ThreadByScapThenLoopy(thread,name, structNum, fdest,failList):
 
-def ThreadToStructure(thread, name, structNum, fdest, failList):
-  ## This function is a wrapper for the entire process. It simply takes in 
-  ## a sequence and the protein name. The name is just used to rename the
-  ## final structure file.
-  thread = StripSequenceToBackbone(thread)
   formatSeq, seqtemp, startPos, loopData = FormatSeqForScap(thread)
   template = MakeVariableLengthTemplate(len(formatSeq),startPos)
   scapList = ThreadToScapFile(formatSeq, name)
   scapfile, err = RunScap(scapList, template) 
-  #scapfile = 'tplt_39_L4_scap.pdb'
-  #name = ''
+
   if err == 1:
     finalfile = '0'
   elif err == 0 and loopData != []:
     finalfile, err2, failList = RunLoopy(scapfile,loopData ,formatSeq, seqtemp, structNum, name, fdest, failList)
   elif err == 0 and loopData == []:
     finalfile = scapfile
+
+  return finalfile, failList
+
+def ThreadByLoopy(thread,name,structNum,fdest,failList):
+
+
+  formatSeq, seqtemp, startPos, loopData = FormatSeqForScap(thread)
+  MakeLoopyList(formatSeq,seqtemp,startPos,loopData)
+
+  return finalfile,failList
+
+def ThreadToStructure(thread, name, structNum, fdest, failList):
+  ## This function is a wrapper for the entire process. It simply takes in 
+  ## a sequence and the protein name. The name is just used to rename the
+  ## final structure file.
+
+  #formatSeq, seqtemp, startPos, loopData = FormatSeqForScapBackbone(thread)
+
+  finalfile, failList = ThreadByLoopy(thread,name,structNum,fdest,failList)
+  #finalfile, failList = ThreadByScapThenLoopy(thread,name,structNum,fdest,failList)
 
   return finalfile, failList
 

@@ -152,10 +152,19 @@ def FormatSeqForScap(rawSeq):
 
   return formatSeq, seqtemp, startPos, loopcutData
      
-#def MakeLoopyList(thread):
-  
-     
+def MakeLoopyList(thread, loopdata):
 
+  temp = []
+  length = len(thread)
+  for i in range(length-2):
+    temp.append([2, i, thread[i]])
+  temp.append([3,i+1,thread[-2]])
+  temp.append([4,i+2,thread[-1]])
+
+  temp.extend(loopdata)
+  print temp
+  return temp
+     
 def MakeVariableLengthTemplate(length,startingPos):
   ## MasterTemplate.pdb starts at L2. The 'length' variable
   ## is the sequence length not counting residues in loops.
@@ -165,8 +174,8 @@ def MakeVariableLengthTemplate(length,startingPos):
   ## 	input:  length = 46					startingPos = 1
   ##	output:	gname = 'tplt_46_L3.pdb'	begin = 5
 
-  fname = '/home/alex/projects/threads/MasterTemplate.pdb'
-  gname = '/home/alex/projects/threads/' 
+  fname = '/home/alex/projects/Threader/MasterTemplate.pdb'
+  gname = '/home/alex/projects/Threader/' 
   gfile = 'tplt_' + str(length) + '_L' + str(startingPos) + '.pdb'
   gpath = gname + gfile
   f = open(fname, 'r')
@@ -264,35 +273,42 @@ def RunScap(fname,tmpltname):
   
   return newfname, err
  
-def RunLoopy(fname, loopData, seq, seq2, structNum, name, fdest, failList):
+def RunLoopy(fname, loopData, seq, seq2,mastseq, structNum, name, fdest, failList):
   ## This function runs the Jackal program Loopy using the Python
   ## subprocess module. Loopy takes a structure and inserts loops.
   ## The output is a new file with the added extension '.loopy'.
-  prm = '2'
-  ini = '500' 
+  prm = '1'
+  ini = '2000' 
   loopcount = 0
   cleanup = ["rm"]
   attempts = 1
   endfile = name + '.pdb'
-  print loopData, '\n'
+  m = 1
+  #print loopData, '\n' # TEMPORARY
   
-  call(['rm','tplt*'])
+  #call(['rm','tplt*']) # TEMPORARY
+  
+  orfname = fname
 
   for flag, loc, loop in loopData:
-    loopcount = AddLoopCut(flag, loc,loop,loopcount, seq2, prm, ini, fname)
+    loopcount = AddLoopCut(flag, loc,loop,loopcount, seq2,mastseq, prm, ini, fname)
 
     temp = (fname.split('.pdb'))[0] + '_loopy.pdb'
     
-    err = CheckForSuccess(temp, name)
-
+    err = CheckForSuccess(temp, name) # TEMPORARY
+    #err = 0 # DEBUGGING
 
     if err == 0:
       cleanup.append(fname)
-      fname = (fname.split('.pdb'))[0] + '_loopy.pdb'
+      fname = orfname[:-4] + "_" + str(m)  +'_loopy.pdb'
+      call(["mv",temp,fname])
+      print fname
     else:
-      call(['rm','tplt*'])
+      call(['rm','tplt*'])  # TEMPORARY
       break
+    m += 1
 
+  #err = 1 # DEBUGGING
   if err == 0:
     call(cleanup)
     
@@ -307,7 +323,7 @@ def RunLoopy(fname, loopData, seq, seq2, structNum, name, fdest, failList):
   return endfile, err, failList
 
 
-def AddLoopCut(flag,loc,loop,loopcount, seq2, prm, ini, fname):
+def AddLoopCut(flag,loc,loop,loopcount, seq2, mastseq, prm, ini, fname):
 
   loc2 = loc - loopcount
   if flag == 0:
@@ -322,10 +338,27 @@ def AddLoopCut(flag,loc,loop,loopcount, seq2, prm, ini, fname):
     restemp = seq2[loc2 - 2: loc2 ] + loop + seq2[loc2 : loc2 + 2]
     loopcount += len(loop)
 
-  elif flag == 2:
+  elif flag == 2 or flag == 3 or flag == 4:
     print "Now mutating residue ", loc, " to ", loop
-    loctemp = str(loc - 2) + "-" + str(loc + 1)
-    restemp = seq2[loc2 - 2: loc2 ] + loop + seq2[loc2 : loc2 + 2]
+    if loc == 0:
+      loctemp = str(loc +1) + "-" + str(loc + 4)
+      restemp = mastseq[loc2] + loop + mastseq[loc2 + 2: loc2 + 4]
+
+    elif loc == 1:
+      loctemp = str(loc) + "-" + str(loc + 3)
+      restemp = mastseq[loc2 - 1] + seq2[loc2 - 1] + loop + mastseq[loc2 + 1]
+
+#    elif flag == 3:
+#      loctemp = str(loc - 1) + "-" + str(loc + 2)
+#      restemp = seq2[loc2 - 2: loc2 ] + loop + mastseq[loc2 +1 :loc2 + 2]
+#
+    elif flag == 4:
+      loctemp = str(loc) + "-" + str(loc + 3)
+      restemp = seq2[loc2 - 2: loc2 ] + loop + mastseq[loc2+1]
+
+    else:
+      loctemp = str(loc + 1) + "-" + str(loc + 3)
+      restemp = seq2[loc2 - 1] + loop + mastseq[loc2 + 1]
 
   task = "loopy -prm " + prm + " -ini " + ini + " -obj " + loctemp + " -cid A -res " + restemp + " " + fname
   
@@ -375,6 +408,7 @@ def ReformatSeq(seq, start):
 
 def ThreadByScapThenLoopy(thread,name, structNum, fdest,failList):
 
+  mastseq = 'IDKSAFVHPTAIVEEGASIGANAHIGPFCIVGPHVEIGEGTVLKSHVVVNGHTKIGRDNEIYQFASIGGGVEIGDRNRIRESVTIGGGGVVGSDNLLMINAHIAHDCTVGNRCILANNATLAGHVSVDDFAIIGGMTAVHQFCII'
   formatSeq, seqtemp, startPos, loopData = FormatSeqForScap(thread)
   template = MakeVariableLengthTemplate(len(formatSeq),startPos)
   scapList = ThreadToScapFile(formatSeq, name)
@@ -383,19 +417,29 @@ def ThreadByScapThenLoopy(thread,name, structNum, fdest,failList):
   if err == 1:
     finalfile = '0'
   elif err == 0 and loopData != []:
-    finalfile, err2, failList = RunLoopy(scapfile,loopData ,formatSeq, seqtemp, structNum, name, fdest, failList)
+    finalfile, err2, failList = RunLoopy(scapfile,loopData ,formatSeq, seqtemp,mastseq, structNum, name, fdest, failList)
   elif err == 0 and loopData == []:
     finalfile = scapfile
 
   return finalfile, failList
 
+
 def ThreadByLoopy(thread,name,structNum,fdest,failList):
 
-
+  mastseq = 'IDKSAFVHPTAIVEEGASIGANAHIGPFCIVGPHVEIGEGTVLKSHVVVNGHTKIGRDNEIYQFASIGGGVEIGDRNRIRESVTIGGGGVVGSDNLLMINAHIAHDCTVGNRCILANNATLAGHVSVDDFAIIGGMTAVHQFCII'
   formatSeq, seqtemp, startPos, loopData = FormatSeqForScap(thread)
-  MakeLoopyList(formatSeq,seqtemp,startPos,loopData)
+  newLoopData =  MakeLoopyList(formatSeq,loopData)
+
+  if startPos == 0:
+    startPos = 6
+  else:
+    startPos = startPos - 1
+  templateName = MakeVariableLengthTemplate(len(thread) + 2,startPos)
+  finalfile,err2,failList =  RunLoopy(templateName, newLoopData, formatSeq, seqtemp, mastseq, structNum,name, fdest,failList)
+
 
   return finalfile,failList
+
 
 def ThreadToStructure(thread, name, structNum, fdest, failList):
   ## This function is a wrapper for the entire process. It simply takes in 
@@ -404,8 +448,8 @@ def ThreadToStructure(thread, name, structNum, fdest, failList):
 
   #formatSeq, seqtemp, startPos, loopData = FormatSeqForScapBackbone(thread)
 
-  #finalfile, failList = ThreadByLoopy(thread,name,structNum,fdest,failList)
-  finalfile, failList = ThreadByScapThenLoopy(thread,name,structNum,fdest,failList)
+  finalfile, failList = ThreadByLoopy(thread,name,structNum,fdest,failList)
+  #finalfile, failList = ThreadByScapThenLoopy(thread,name,structNum,fdest,failList)
 
   return finalfile, failList
 
@@ -436,8 +480,8 @@ if __name__ == "__main__":
 
   threadList = GetInputThreads()
   structNum = 1
-  #fdest = "/home/alex/projects/threads/LHBYeast"
-  fdest = "/export/home/shared/yeast"
+  fdest = "/home/alex/projects/threads/LHBYeast"
+  #fdest = "/export/home/shared/yeast"
   failList = []
 
   for name,thread in threadList:
@@ -447,3 +491,4 @@ if __name__ == "__main__":
     print "Done with ", name
     structNum += 1
     print "*******************************************************************************\n"
+

@@ -152,7 +152,7 @@ def FormatSeqForScap(rawSeq):
 
   return formatSeq, seqtemp, startPos, loopcutData
      
-def MakeLoopyList(thread):
+#def MakeLoopyList(thread):
   
      
 
@@ -186,10 +186,9 @@ def MakeVariableLengthTemplate(length,startingPos):
   ## This is redundant and a little wasteful to do 
   ## every time, so this could be a point to improve.
   for k in range(len(atomLines)):
-    #temp = atomLines[k].split()
     temp2 = atomLines[k]
     resindex = int(temp2[23:27])
-    #resindex = int(temp[5])
+  
     if resindex == previndex:
       tempRes.append(atomLines[k])
     else:
@@ -212,10 +211,10 @@ def MakeVariableLengthTemplate(length,startingPos):
       g.write(newAtomLine)
       m +=1
     k += 1
-   
     
   f.close()
   g.close()
+
   return gfile
 
 def ThreadToScapFile(thread, protName):
@@ -405,8 +404,8 @@ def ThreadToStructure(thread, name, structNum, fdest, failList):
 
   #formatSeq, seqtemp, startPos, loopData = FormatSeqForScapBackbone(thread)
 
-  finalfile, failList = ThreadByLoopy(thread,name,structNum,fdest,failList)
-  #finalfile, failList = ThreadByScapThenLoopy(thread,name,structNum,fdest,failList)
+  #finalfile, failList = ThreadByLoopy(thread,name,structNum,fdest,failList)
+  finalfile, failList = ThreadByScapThenLoopy(thread,name,structNum,fdest,failList)
 
   return finalfile, failList
 

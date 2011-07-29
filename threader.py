@@ -251,9 +251,11 @@ def RunScap(fname,tmpltname):
   ## hardwired in, however it wouldn't be hard to change this in 
   ## the future.
   prm = '2'
-  ini = '500'
-  min = '1'
+  ini = '10'
+  min = '2'
   rtm = '1'
+  
+
   scaplistfile = (fname.split('/'))[-1]
   task = "scap -prm " + prm + " -min " + min + " -rtm " + rtm + " -ini " + ini + " " + tmpltname + " " + scaplistfile
   newtask = task.split()
@@ -269,7 +271,6 @@ def RunScap(fname,tmpltname):
     
   call(['rm',fname, tmpltname])
  
-  #print "Return Code:  " , retCode
   
   return newfname, err
  
@@ -277,7 +278,7 @@ def RunLoopy(fname, loopData, seq, seq2,mastseq, structNum, name, fdest, failLis
   ## This function runs the Jackal program Loopy using the Python
   ## subprocess module. Loopy takes a structure and inserts loops.
   ## The output is a new file with the added extension '.loopy'.
-  prm = '1'
+  prm = '3'
   ini = '2000' 
   loopcount = 0
   cleanup = ["rm"]
@@ -308,15 +309,17 @@ def RunLoopy(fname, loopData, seq, seq2,mastseq, structNum, name, fdest, failLis
       break
     m += 1
 
+
+  cleanup.append(fname)
   #err = 1 # DEBUGGING
   if err == 0:
-    call(cleanup)
-    
     cutCall = "cut -c0-55 " + fname + " > " + endfile 
     call(cutCall, shell=True)
 
     mvtask = "mv " + endfile + " " + fdest
     call(mvtask.split())
+    
+    call(cleanup)
   else:
     pass
 
@@ -341,17 +344,13 @@ def AddLoopCut(flag,loc,loop,loopcount, seq2, mastseq, prm, ini, fname):
   elif flag == 2 or flag == 3 or flag == 4:
     print "Now mutating residue ", loc, " to ", loop
     if loc == 0:
-      loctemp = str(loc +1) + "-" + str(loc + 4)
-      restemp = mastseq[loc2] + loop + mastseq[loc2 + 2: loc2 + 4]
+      loctemp = str(loc+1) + "-" + str(loc + 3)
+      restemp = mastseq[loc2+1] + loop + mastseq[loc2 + 2: loc2 + 4]
 
     elif loc == 1:
       loctemp = str(loc) + "-" + str(loc + 3)
       restemp = mastseq[loc2 - 1] + seq2[loc2 - 1] + loop + mastseq[loc2 + 1]
 
-#    elif flag == 3:
-#      loctemp = str(loc - 1) + "-" + str(loc + 2)
-#      restemp = seq2[loc2 - 2: loc2 ] + loop + mastseq[loc2 +1 :loc2 + 2]
-#
     elif flag == 4:
       loctemp = str(loc) + "-" + str(loc + 3)
       restemp = seq2[loc2 - 2: loc2 ] + loop + mastseq[loc2+1]
@@ -431,9 +430,11 @@ def ThreadByLoopy(thread,name,structNum,fdest,failList):
   newLoopData =  MakeLoopyList(formatSeq,loopData)
 
   if startPos == 0:
+    startPos = 5
+  elif startPos == 1:
     startPos = 6
   else:
-    startPos = startPos - 1
+    startPos = startPos - 2
   templateName = MakeVariableLengthTemplate(len(thread) + 2,startPos)
   finalfile,err2,failList =  RunLoopy(templateName, newLoopData, formatSeq, seqtemp, mastseq, structNum,name, fdest,failList)
 
@@ -448,8 +449,8 @@ def ThreadToStructure(thread, name, structNum, fdest, failList):
 
   #formatSeq, seqtemp, startPos, loopData = FormatSeqForScapBackbone(thread)
 
-  finalfile, failList = ThreadByLoopy(thread,name,structNum,fdest,failList)
-  #finalfile, failList = ThreadByScapThenLoopy(thread,name,structNum,fdest,failList)
+  #finalfile, failList = ThreadByLoopy(thread,name,structNum,fdest,failList)
+  finalfile, failList = ThreadByScapThenLoopy(thread,name,structNum,fdest,failList)
 
   return finalfile, failList
 
@@ -488,7 +489,7 @@ if __name__ == "__main__":
     print "Target: ", thread
     fname, failList = ThreadToStructure(thread,name, structNum, fdest, failList)
     #thread = StripSequenceToBackbone(thread)
-    print "Done with ", name
+    print "Done with ", name, ". Located in file: ", fname
     structNum += 1
     print "*******************************************************************************\n"
 

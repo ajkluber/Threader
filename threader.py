@@ -457,7 +457,7 @@ def ThreadToStructure(thread, name, structNum, fdest, failList):
 def GetInputThreads():
   ## This function retreives threads from the input file. It ignores any
   ## lines starting with a '#' and blank lines.
-  inputFile = open("ThreadFile.txt","r")
+  inputFile = open("InputThreads.txt","r")
 
   threadList = []
   for line in inputFile.readlines():

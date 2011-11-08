@@ -1,0 +1,4 @@
+The Threader project is a collection of Python scripts that take a amino acid
+sequence and put it onto a template backbone. This is done through the python
+subprocess module which is used to call an external program Jackal that does
+most of the work. Jackal was developed by the Honing Lab.
